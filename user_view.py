@@ -6,23 +6,17 @@ from flask_bcrypt import generate_password_hash, check_password_hash
 def validar_senha(senha):
     if len(senha) < 8:
         return "A senha deve ter pelo menos 8 caracteres."
-
     if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", senha):
         return "A senha deve conter pelo menos um símbolo especial (!@#$%^&*...)."
-
     if not re.search(r"[A-Z]", senha):
         return "A senha deve conter pelo menos uma letra maiúscula."
-
     return True
 
 @app.route('/user', methods=['GET'])
 def get_user():
     cursor = con.cursor()
-
-    cursor.execute('SELECT ID_USUARIO, NOME_COMPLETO, EMAIL, SENHA_HASH FROM USUARIO')
-
+    cursor.execute('SELECT ID_USUARIO, NOME_COMPLETO, EMAIL, SENHA_HASH FROM usuarios')
     resultado = cursor.fetchall()
-
     user_dic = []
     for user in resultado:
         user_dic.append({
@@ -31,9 +25,7 @@ def get_user():
             'email': user[2],
             'senha_hash': user[3]
         })
-
     cursor.close()
-
     return jsonify({'usuarios': user_dic}), 200
 
 @app.route('/user', methods=['POST'])
@@ -45,8 +37,7 @@ def create_user():
     tipo_usuario = data.get('tipo_usuario')
 
     cursor = con.cursor()
-    cursor.execute("SELECT 1 FROM USUARIO WHERE email = ?", (email,))
-
+    cursor.execute("SELECT 1 FROM usuarios WHERE email = %s", (email,))
     if cursor.fetchone():
         return jsonify({'message': 'Email já cadastrado'}), 400
 
@@ -55,12 +46,14 @@ def create_user():
         return jsonify({'error': senha_check}), 400
 
     senha_hash = generate_password_hash(senha).decode('utf-8')
-
-    cursor.execute("INSERT INTO USUARIO (nome_completo, email, senha_hash, ativo, tipo_usuario) VALUES (?, ?, ?, 1, ?)", (nome, email, senha_hash, tipo_usuario))
+    cursor.execute(
+        "INSERT INTO usuarios (nome_completo, email, senha_hash, ativo, tipo_usuario) VALUES (%s, %s, %s, 1, %s)",
+        (nome, email, senha_hash, tipo_usuario)
+    )
     con.commit()
 
-    cursor.execute('SELECT ID_USUARIO FROM USUARIO WHERE EMAIL = ?', (email,))
-    id = cursor.fetchone()[0]
+    cursor.execute('SELECT ID_USUARIO FROM usuarios WHERE EMAIL = %s', (email,))
+    id_usuario = cursor.fetchone()[0]
     cursor.close()
 
     return jsonify({
@@ -68,7 +61,7 @@ def create_user():
         'dados': {
             'nome_completo': nome,
             'email': email,
-            'id_usuario': id,
+            'id_usuario': id_usuario,
             'tipo_usuario': tipo_usuario
         }
     })
@@ -85,23 +78,26 @@ def update_user(id):
     senha_nova = data.get('senha_nova')
 
     cursor = con.cursor()
-
-    cursor.execute("SELECT ID_USUARIO, NOME_COMPLETO, DATA_NASCIMENTO, CPF_CNPJ, TELEFONE, EMAIL, SENHA_HASH FROM USUARIO WHERE id_usuario = ?", (id,))
+    cursor.execute(
+        "SELECT ID_USUARIO, NOME_COMPLETO, DATA_NASCIMENTO, CPF_CNPJ, TELEFONE, EMAIL, SENHA_HASH FROM usuarios WHERE id_usuario = %s",
+        (id,)
+    )
     user_data = cursor.fetchone()
 
     if not user_data:
         cursor.close()
         return jsonify({'error': 'Usuário não encontrado'}), 404
 
-    cursor.execute("SELECT 1 FROM USUARIO WHERE email = ?", (email,))
-
+    cursor.execute("SELECT 1 FROM usuarios WHERE email = %s", (email,))
     if email != user_data[5]:
         if cursor.fetchone():
             return jsonify({'error': 'Email já cadastrado'}), 404
 
     if not senha_nova and not senha_hash:
-        cursor.execute("UPDATE USUARIO SET NOME_COMPLETO = ?, DATA_NASCIMENTO = ?, CPF_CNPJ = ?, TELEFONE = ?, EMAIL = ? WHERE id_usuario = ?",
-            (nome_completo, data_nascimento, cpf_cnpj, telefone, email, id))
+        cursor.execute(
+            "UPDATE usuarios SET NOME_COMPLETO = %s, DATA_NASCIMENTO = %s, CPF_CNPJ = %s, TELEFONE = %s, EMAIL = %s WHERE id_usuario = %s",
+            (nome_completo, data_nascimento, cpf_cnpj, telefone, email, id)
+        )
         con.commit()
         cursor.close()
         return jsonify({
@@ -126,9 +122,10 @@ def update_user(id):
     else:
         return jsonify({"error": "Senha atual incorreta."}), 401
 
-    cursor.execute("UPDATE USUARIO SET NOME_COMPLETO = ?, DATA_NASCIMENTO = ?, CPF_CNPJ = ?, TELEFONE = ?, EMAIL = ?, SENHA_HASH = ? WHERE id_usuario = ?",
-                   (nome_completo, data_nascimento, cpf_cnpj, telefone, email, senha_enviada, id))
-
+    cursor.execute(
+        "UPDATE usuarios SET NOME_COMPLETO = %s, DATA_NASCIMENTO = %s, CPF_CNPJ = %s, TELEFONE = %s, EMAIL = %s, SENHA_HASH = %s WHERE id_usuario = %s",
+        (nome_completo, data_nascimento, cpf_cnpj, telefone, email, senha_enviada, id)
+    )
     con.commit()
     cursor.close()
 
@@ -142,7 +139,6 @@ def update_user(id):
             'email': email
         }
     })
-
 
 tentativas = 0
 
@@ -158,7 +154,10 @@ def login_user():
         return jsonify({"error": "Todos os campos (email, senha) são obrigatórios."}), 400
 
     cursor = con.cursor()
-    cursor.execute("SELECT id_usuario, email, nome_completo, data_nascimento, cpf_cnpj, telefone, senha_hash, ativo, tipo_usuario FROM USUARIO WHERE EMAIL = ?", (email,))
+    cursor.execute(
+        "SELECT id_usuario, email, nome_completo, data_nascimento, cpf_cnpj, telefone, senha_hash, ativo, tipo_usuario FROM usuarios WHERE EMAIL = %s",
+        (email,)
+    )
     user_data = cursor.fetchone()
 
     if not user_data:
@@ -199,7 +198,7 @@ def login_user():
         tentativas += 1
 
     if tentativas >= 3 and tipo_usuario != 1:
-        cursor.execute("UPDATE USUARIO SET ATIVO = 0 WHERE id_usuario = ?", (id_usuario,))
+        cursor.execute("UPDATE usuarios SET ATIVO = 0 WHERE id_usuario = %s", (id_usuario,))
         con.commit()
         cursor.close()
         return jsonify({"error": "Número máximo de tentativas de login excedido."}), 401
