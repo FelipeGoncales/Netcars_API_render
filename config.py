@@ -1,0 +1,1 @@
+DB_URL = 'postgresql://banco_netcars_user:3YnvKlWtwztEJBYq4ktv6CS3dmq4Ziul@dpg-cv18h3jtq21c73cm0rsg-a.oregon-postgres.render.com/banco_netcars'
